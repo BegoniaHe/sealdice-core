@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -190,8 +191,7 @@ func RegisterBuiltinExtLog(self *Dice) {
 
 			if cmdArgs.IsArgEqual(1, "on") { //nolint:nestif
 				if ctx.IsPrivate {
-					ReplyToSender(ctx, msg, DiceFormatTmpl(ctx, "核心:提示_私聊不可用"))
-					return CmdExecuteResult{Matched: true, Solved: true}
+					ctx.IsPrivate = false
 				}
 
 				// 如果日志已经开启，报错返回
@@ -206,7 +206,33 @@ func RegisterBuiltinExtLog(self *Dice) {
 					name = group.LogCurName
 				}
 
-				if name != "" {
+				if name == "" {
+					if group.LogCurName != "" && name == "" {
+						VarSetValueStr(ctx, "$t记录名称", group.LogCurName)
+						ReplyToSender(ctx, msg, DiceFormatTmpl(ctx, "日志:记录_新建_失败_未结束的记录"))
+						return CmdExecuteResult{Matched: true, Solved: true}
+					}
+					if groupNotActiveCheck() {
+						return CmdExecuteResult{Matched: true, Solved: true}
+					}
+
+					if name == "" {
+						name = strconv.Itoa(int(time.Now().Unix()))
+					}
+					if group.LogCurName != "" {
+						VarSetValueInt64(ctx, "$t存在开启记录", 1)
+					} else {
+						VarSetValueInt64(ctx, "$t存在开启记录", 0)
+					}
+					VarSetValueStr(ctx, "$t上一记录名称", group.LogCurName)
+					VarSetValueStr(ctx, "$t记录名称", name)
+					group.LogCurName = name
+					group.LogOn = true
+					group.UpdatedAtTime = time.Now().Unix()
+
+					ReplyToSender(ctx, msg, DiceFormatTmpl(ctx, "日志:记录_新建"))
+					return CmdExecuteResult{Matched: true, Solved: true}
+				} else {
 					lines, exists := model.LogLinesCountGet(ctx.Dice.DBLogs, group.GroupID, name)
 
 					if exists {
@@ -225,8 +251,6 @@ func RegisterBuiltinExtLog(self *Dice) {
 						VarSetValueStr(ctx, "$t记录名称", name)
 						ReplyToSender(ctx, msg, DiceFormatTmpl(ctx, "日志:记录_开启_失败_无此记录"))
 					}
-				} else {
-					ReplyToSender(ctx, msg, DiceFormatTmpl(ctx, "日志:记录_开启_失败_尚未新建"))
 				}
 				return CmdExecuteResult{Matched: true, Solved: true}
 			} else if cmdArgs.IsArgEqual(1, "off") {
@@ -343,8 +367,9 @@ func RegisterBuiltinExtLog(self *Dice) {
 				return CmdExecuteResult{Matched: true, Solved: true}
 			} else if cmdArgs.IsArgEqual(1, "new") {
 				if ctx.IsPrivate {
-					ReplyToSender(ctx, msg, DiceFormatTmpl(ctx, "核心:提示_私聊不可用"))
-					return CmdExecuteResult{Matched: true, Solved: true}
+					/*ReplyToSender(ctx, msg, DiceFormatTmpl(ctx, "核心:提示_私聊不可用"))
+					  return CmdExecuteResult{Matched: true, Solved: true}*/
+					ctx.IsPrivate = false
 				}
 
 				name := cmdArgs.GetArgN(2)
@@ -358,7 +383,7 @@ func RegisterBuiltinExtLog(self *Dice) {
 				}
 
 				if name == "" {
-					name = time.Now().Format("2006_01_02_15_04_05")
+					name = strconv.Itoa(int(time.Now().Unix()))
 				}
 				if group.LogCurName != "" {
 					VarSetValueInt64(ctx, "$t存在开启记录", 1)
